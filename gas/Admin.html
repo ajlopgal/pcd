@@ -206,6 +206,10 @@
               <input type="text" id="options" autocomplete="off" placeholder="ABCDE" required />
             </div>
             <div>
+              <label for="versions-count" data-i18n="versions_count">Versiones del examen (1–10)</label>
+              <input type="number" id="versions-count" min="1" max="10" step="1" value="1" required />
+            </div>
+            <div>
               <label for="start-datetime" data-i18n="start">Inicio programado</label>
               <input type="datetime-local" id="start-datetime" />
             </div>
@@ -272,6 +276,8 @@
           </div>
           <h2 data-i18n="answer_key">Clave de respuestas</h2>
           <p data-i18n="answer_key_help">Pega la cadena de respuestas correctas (sin espacios) o las letras separadas por espacios.</p>
+          <label for="key-version-selector" data-i18n="key_version">Versión de la clave</label>
+          <select id="key-version-selector"></select>
           <label for="key-input" data-i18n="key_label">Clave</label>
           <textarea id="key-input" placeholder="ABCDE..."></textarea>
           <div id="key-status" class="note warn hidden"></div>
@@ -401,6 +407,8 @@
           exam_name: "Nom de l'examen",
           n_questions: 'Nombre de preguntes',
           options: 'Opcions disponibles (ex. ABCDE)',
+          versions_count: 'Versions de l’examen (1–10)',
+          key_version: 'Versió de la clau',
           start: 'Inici programat',
           end: 'Fi programada',
           security: 'Mesures de seguretat',
@@ -421,7 +429,8 @@
           copy_failed: "No s'ha pogut copiar l'enllaç. Copia'l manualment.",
           student_link_hint: "Comparteix l'enllaç quan la configuració estigui preparada i l'examen estigui obert.",
           answer_key: 'Clau de respostes',
-          answer_key_help: 'Enganxa la cadena de respostes correctes (sense espais) o les lletres separades per espais.',
+          answer_key_help: 'Desa primer el nombre de versions. Després enganxa la clau corresponent a la versió seleccionada.',
+          key_version_option: 'Versió %N%',
           key_label: 'Clau',
           save_key: 'Desa la clau',
           grading_title: 'Criteris de qualificació',
@@ -450,6 +459,7 @@
           reset_all_btn: 'Esborra tot',
           sub_col_date: 'Data',
           sub_col_student: 'Codi alumne',
+          sub_col_version: 'Versió',
           config_unsaved_hint: 'Hi ha canvis sense desar. Prem «Desa la configuració» per aplicar-los.',
           save_config_tooltip: 'Tens canvis sense desar',
           grading_unsaved_hint: 'Hi ha canvis de qualificació sense desar. Prem «Desa criteris de nota».',
@@ -519,6 +529,8 @@
           exam_name: 'Nombre del examen',
           n_questions: 'Número de preguntas',
           options: 'Opciones disponibles (ej. ABCDE)',
+          versions_count: 'Versiones del examen (1–10)',
+          key_version: 'Versión de la clave',
           start: 'Inicio programado',
           end: 'Fin programado',
           security: 'Medidas de seguridad',
@@ -539,7 +551,8 @@
           copy_failed: 'No se ha podido copiar el enlace. Cópialo manualmente.',
           student_link_hint: 'Comparte el enlace cuando la configuración esté lista y el examen abierto.',
           answer_key: 'Clave de respuestas',
-          answer_key_help: 'Pega la cadena de respuestas correctas (sin espacios) o las letras separadas por espacios.',
+          answer_key_help: 'Guarda primero el número de versiones. Después pega la clave de la versión seleccionada.',
+          key_version_option: 'Versión %N%',
           key_label: 'Clave',
           save_key: 'Guardar clave',
           grading_title: 'Criterios de calificación',
@@ -568,6 +581,7 @@
           reset_all_btn: 'Borrar todo',
           sub_col_date: 'Fecha',
           sub_col_student: 'Código alumno',
+          sub_col_version: 'Versión',
           config_unsaved_hint: 'Hay cambios sin guardar. Pulsa «Guardar configuración» para aplicarlos.',
           save_config_tooltip: 'Tienes cambios sin guardar',
           grading_unsaved_hint: 'Hay cambios de calificación sin guardar. Pulsa «Guardar criterios».',
@@ -659,6 +673,9 @@
 
       let adminCode = '';
       let selectedExamId = '';
+      let selectedKeyVersion = 1;
+      let currentKeysByVersion = {};
+      let currentConfiguredVersionCount = 1;
       let baseUrl = '';
       let currentManualState = 'auto';
       let currentIsOpen = false;
@@ -702,6 +719,12 @@
         document.getElementById('login-form').addEventListener('submit', handleLogin);
         document.getElementById('config-form').addEventListener('submit', handleConfigSave);
         document.getElementById('key-form').addEventListener('submit', handleKeySave);
+        document.getElementById('key-version-selector').addEventListener('change', event => {
+          const keyInput = document.getElementById('key-input');
+          if (keyInput) currentKeysByVersion[String(selectedKeyVersion)] = keyInput.value;
+          selectedKeyVersion = Number(event.target.value) || 1;
+          renderKeyEditor();
+        });
         document.getElementById('run-correction').addEventListener('click', handleCorrection);
         document.getElementById('save-grading').addEventListener('click', handleSaveGrading);
         // Detecta canvis a criteris de nota
@@ -821,6 +844,7 @@
           examName: document.getElementById('exam-name').value,
           nQuestions: document.getElementById('questions-count').value,
           options: document.getElementById('options').value,
+          versionCount: document.getElementById('versions-count').value,
           startIso: localInputToIso(document.getElementById('start-datetime').value),
           endIso: localInputToIso(document.getElementById('end-datetime').value),
           manualState: currentManualState,
@@ -847,7 +871,7 @@
       }
 
       function hookConfigDirtySignals() {
-        const ids = ['exam-name','questions-count','options','start-datetime','end-datetime','shuffle-questions','shuffle-answers','enforce-fullscreen'];
+        const ids = ['exam-name','questions-count','options','versions-count','start-datetime','end-datetime','shuffle-questions','shuffle-answers','enforce-fullscreen'];
         ids.forEach(id => {
           const el = document.getElementById(id);
           if (!el) return;
@@ -902,7 +926,7 @@
             showFlash(extractMessage(err), true);
             setButtonBusy('save-key', false);
           })
-          .saveAnswerKeyForAdmin(adminCode, selectedExamId, keyValue);
+          .saveAnswerKeyForAdmin(adminCode, selectedExamId, keyValue, selectedKeyVersion);
       }
 
       function handleCorrection() {
@@ -1234,6 +1258,8 @@
         const shuffleAnswersBox = document.getElementById('shuffle-answers');
         const enforceFullscreenBox = document.getElementById('enforce-fullscreen');
         const keyInput = document.getElementById('key-input');
+        const keyVersionSelector = document.getElementById('key-version-selector');
+        const versionsCountInput = document.getElementById('versions-count');
         const examNameInput = document.getElementById('exam-name');
         const clearButton = document.getElementById('clear-submissions');
         const passwordForm = document.getElementById('password-form');
@@ -1257,6 +1283,10 @@
         if (keyInput) {
           keyInput.value = '';
         }
+        currentKeysByVersion = {};
+        selectedKeyVersion = 1;
+        currentConfiguredVersionCount = 1;
+        if (versionsCountInput) versionsCountInput.value = '1';
         if (gradeMaxInput) gradeMaxInput.value = '10';
         if (passThresholdInput) passThresholdInput.value = '5';
         if (penChk) penChk.checked = false;
@@ -1312,6 +1342,7 @@
           if (keyInput) {
             keyInput.value = '';
           }
+          if (keyVersionSelector) keyVersionSelector.innerHTML = '<option value="1">' + tAdmin('key_version_option').replace('%N%', '1') + '</option>';
           return;
         }
 
@@ -1319,7 +1350,9 @@
         resetStatusBadge();
 
         if (state.config) {
+          currentConfiguredVersionCount = Number(state.config.versionCount) || 1;
           document.getElementById('questions-count').value = state.config.nQuestions;
+          if (versionsCountInput) versionsCountInput.value = state.config.versionCount || 1;
           document.getElementById('options').value = state.config.optionsString;
           document.getElementById('start-datetime').value = isoToLocalInput(state.config.startIso);
           document.getElementById('end-datetime').value = isoToLocalInput(state.config.endIso);
@@ -1422,25 +1455,36 @@
         }
         lastExamId = selectedExamId;
 
-        if (state.keyPresent) {
-          keyStatusBox.textContent = tAdmin('key_saved');
-          keyStatusBox.className = 'note ok';
-          if (keyInput) {
-            keyInput.value = state.keyValue || '';
-          }
-        } else {
-          keyStatusBox.textContent = state.keyError || tAdmin('key_not_set');
-          keyStatusBox.className = 'note warn';
-          if (keyInput) {
-            keyInput.value = '';
-          }
-        }
-        keyStatusBox.classList.remove('hidden');
+        currentKeysByVersion = state.keysByVersion || (state.keyPresent ? { '1': state.keyValue || '' } : {});
+        renderKeyEditor(currentConfiguredVersionCount);
 
         const selector = document.getElementById('exam-selector');
         selector.value = selectedExamId;
         showConfigLoading(false);
         showOverviewLoading(false);
+      }
+
+      function renderKeyEditor(versionCount) {
+        const selector = document.getElementById('key-version-selector');
+        const input = document.getElementById('key-input');
+        const status = document.getElementById('key-status');
+        const countField = document.getElementById('versions-count');
+        const count = Math.max(1, Math.min(10, Number(versionCount || currentConfiguredVersionCount || (countField && countField.value) || 1)));
+        if (!selector || !input || !status) return;
+        selector.innerHTML = '';
+        for (let version = 1; version <= count; version++) {
+          const option = document.createElement('option');
+          option.value = String(version);
+          option.textContent = tAdmin('key_version_option').replace('%N%', String(version));
+          selector.appendChild(option);
+        }
+        if (selectedKeyVersion > count || selectedKeyVersion < 1) selectedKeyVersion = 1;
+        selector.value = String(selectedKeyVersion);
+        const keyValue = currentKeysByVersion[String(selectedKeyVersion)] || '';
+        input.value = keyValue;
+        status.textContent = keyValue ? tAdmin('key_saved') : tAdmin('key_not_set');
+        status.className = keyValue ? 'note ok' : 'note warn';
+        status.classList.remove('hidden');
       }
 
       function resetStatusBadge() {
@@ -1764,7 +1808,7 @@
           table.style.borderCollapse = 'collapse';
           const thead = document.createElement('thead');
           const thr = document.createElement('tr');
-          ;[tAdmin('sub_col_date'), tAdmin('sub_col_student')].forEach(h => {
+          ;[tAdmin('sub_col_date'), tAdmin('sub_col_student'), tAdmin('sub_col_version')].forEach(h => {
             const th = document.createElement('th');
             th.textContent = h;
             th.style.textAlign = 'left';
@@ -1782,8 +1826,12 @@
             const td2 = document.createElement('td');
             td2.textContent = it.studentCode || '';
             td2.style.padding = '4px 6px';
+            const td3 = document.createElement('td');
+            td3.textContent = 'V' + (Number(it.version) || 1);
+            td3.style.padding = '4px 6px';
             tr.appendChild(td1);
             tr.appendChild(td2);
+            tr.appendChild(td3);
             tbody.appendChild(tr);
           });
           table.appendChild(thead);

@@ -19,6 +19,7 @@
       .options-row input[type="radio"] { margin: 0; }
       .options-row label.selected { border-color: #1976d2; background: #e3f2fd; font-weight: 600; }
       input[type="text"] { width: 100%; padding: 0.6rem; border: 1px solid #ccd3de; border-radius: 4px; font-size: 1rem; }
+      select { width: 100%; padding: 0.6rem; border: 1px solid #ccd3de; border-radius: 4px; font-size: 1rem; background: #fff; }
       form button { margin-top: 1.5rem; padding: 0.8rem 1.2rem; font-size: 1rem; border: none; border-radius: 4px; color: #fff; background: #1976d2; cursor: pointer; width: auto; min-width: 160px; display: inline-flex; justify-content: center; align-items: center; }
       form button[disabled] { background: #9fbad7; cursor: not-allowed; }
       .notice { margin: 1rem 0; padding: 0.75rem 1rem; border-radius: 6px; background: #e3f2fd; color: #0d47a1; }
@@ -59,6 +60,8 @@
       <form id="exam-form" class="hidden">
         <label for="student-code" data-i18n="student_label">Nom/codi de l'alumne</label>
         <input type="text" id="student-code" name="studentCode" autocomplete="off" required />
+        <label for="exam-version" data-i18n="version_label">Versión del examen</label>
+        <select id="exam-version" name="version" required></select>
         <div id="questions-container"></div>
         <button id="submit-btn" type="submit" data-i18n="submit">Envia les respostes</button>
       </form>
@@ -77,6 +80,8 @@
         ca: {
           title: "Lliurament d'examen",
           student_label: "Nom/codi de l'alumne",
+          version_label: 'Versió de l’examen',
+          version_option: 'Versió %N%',
           submit: 'Envia les respostes',
           thanks_title: 'Moltes gràcies!',
           thanks_desc: 'Hem rebut les teves respostes. Pots tancar aquesta finestra.',
@@ -90,6 +95,8 @@
         es: {
           title: 'Entrega del examen',
           student_label: 'Nombre/código del alumno',
+          version_label: 'Versión del examen',
+          version_option: 'Versión %N%',
           submit: 'Enviar respuestas',
           thanks_title: '¡Muchas gracias!',
           thanks_desc: 'Hemos recibido tus respuestas. Puedes cerrar esta ventana.',
@@ -173,8 +180,20 @@
         examConfig = config;
         const form = document.getElementById('exam-form');
         const container = document.getElementById('questions-container');
+        const versionSelect = document.getElementById('exam-version');
+        const previousVersion = versionSelect.value;
         const statusBox = document.getElementById('status-box');
         container.innerHTML = '';
+        versionSelect.innerHTML = '';
+        (config.versions || []).forEach(version => {
+          const option = document.createElement('option');
+          option.value = String(version);
+          option.textContent = t('version_option').replace('%N%', String(version));
+          versionSelect.appendChild(option);
+        });
+        if ((config.versions || []).some(version => String(version) === previousVersion)) {
+          versionSelect.value = previousVersion;
+        }
 
         statusBox.className = 'notice hidden';
         statusBox.textContent = '';
@@ -315,6 +334,7 @@
         const payload = {
           examId: EXAM_ID,
           studentCode,
+          version: Number(document.getElementById('exam-version').value),
           answers,
           userAgent: navigator.userAgent || 'unknown'
         };
@@ -391,9 +411,11 @@
       const storage = safeStorage();
       function attachDraftHandlers() {
         const studentField = document.getElementById('student-code');
+        const versionField = document.getElementById('exam-version');
         if (studentField) {
           studentField.addEventListener('input', saveDraft);
         }
+        if (versionField) versionField.addEventListener('change', saveDraft);
       }
       function collectAnswersArray() {
         if (!examConfig) return [];
@@ -411,6 +433,7 @@
         try {
           const payload = {
             studentCode: (document.getElementById('student-code').value || '').trim(),
+            version: Number(document.getElementById('exam-version').value) || 1,
             answers: collectAnswersArray(),
             ts: Date.now()
           };
@@ -426,6 +449,10 @@
             if (data.studentCode) {
               const studentField = document.getElementById('student-code');
               if (studentField) studentField.value = data.studentCode;
+            }
+            const versionField = document.getElementById('exam-version');
+            if (versionField && data.version && Array.from(versionField.options).some(option => option.value === String(data.version))) {
+              versionField.value = String(data.version);
             }
             if (Array.isArray(data.answers) && examConfig) {
               data.answers.forEach((val, i) => {

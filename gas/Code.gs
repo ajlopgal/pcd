@@ -14,9 +14,9 @@ const SHEET_NAMES = {
 const UI_MENU_ENABLED = false;
 
 const SHEET_HEADERS = {
-  Config: ['exam_id', 'exam_name', 'n_questions', 'options', 'start_iso', 'end_iso', 'manual_state', 'shuffle_questions', 'shuffle_answers', 'enforce_fullscreen', 'grade_max', 'pass_threshold', 'penalize_wrong', 'penalty_value'],
+  Config: ['exam_id', 'exam_name', 'n_questions', 'options', 'start_iso', 'end_iso', 'manual_state', 'shuffle_questions', 'shuffle_answers', 'enforce_fullscreen', 'grade_max', 'pass_threshold', 'penalize_wrong', 'penalty_value', 'version_count'],
   Keys: ['exam_id', 'key_json'],
-  Submissions: ['timestamp', 'exam_id', 'student_code', 'answers_json', 'user_agent'],
+  Submissions: ['timestamp', 'exam_id', 'student_code', 'answers_json', 'user_agent', 'version'],
   'Correcció': ['Data', 'Codi alumne', 'Encerts', 'Errors', 'En blanc', 'Nota (0-10)'],
   Settings: ['name', 'value']
 };
@@ -35,7 +35,8 @@ const CONFIG_COLUMNS = {
   GRADE_MAX: 11,
   PASS_THRESHOLD: 12,
   PENALIZE_WRONG: 13,
-  PENALTY_VALUE: 14
+  PENALTY_VALUE: 14,
+  VERSION_COUNT: 15
 };
 
 const SETTINGS_KEYS = {
@@ -74,6 +75,8 @@ function i18n_(lang) {
     colBlank: 'En blanc',
     colScorePrefix: 'Nota (',
     keyLabel: 'Clau',
+    versionLabel: 'Versió',
+    versionPrompt: 'Selecciona la versió del teu examen.',
     hQuestion: 'Pregunta',
     hResponses: 'Respostes',
     hCorrect: 'Encerts',
@@ -142,6 +145,8 @@ function i18n_(lang) {
     colBlank: 'En blanco',
     colScorePrefix: 'Nota (',
     keyLabel: 'Clave',
+    versionLabel: 'Versión',
+    versionPrompt: 'Selecciona la versión de tu examen.',
     hQuestion: 'Pregunta',
     hResponses: 'Respuestas',
     hCorrect: 'Aciertos',
@@ -247,18 +252,23 @@ function getConfig(examId, lang) {
     throw new Error(notFoundMessage);
   }
   const status = buildExamStatus_(config, new Date(), locale);
+  const versions = getConfiguredExamVersions_(config);
+  const keyMissingMessage = locale === 'es'
+    ? 'El examen aún no tiene ninguna clave de respuestas configurada.'
+    : 'Encara no s’ha definit cap clau de respostes per a aquest examen.';
   return {
     examId: config.examId,
     nQuestions: config.nQuestions,
     options: config.options,
+    versions: versions,
     startIso: config.startIso,
     endIso: config.endIso,
     manualState: config.manualState,
     shuffleQuestions: config.shuffleQuestions,
     shuffleAnswers: config.shuffleAnswers,
     enforceFullscreen: config.enforceFullscreen,
-    acceptingSubmissions: status.isOpen,
-    statusMessage: status.message
+    acceptingSubmissions: status.isOpen && versions.length > 0,
+    statusMessage: versions.length ? status.message : keyMissingMessage
   };
 }
 
@@ -294,6 +304,9 @@ function submitResponse(payload) {
     return value;
   });
 
+  const version = normalizeExamVersion_(payload.version, config.versionCount);
+  getAnswerKey_(examId, config, version);
+
   const status = buildExamStatus_(config, new Date());
   if (!status.isOpen) {
     throw new Error(status.blockingMessage || "L'examen no està obert en aquest moment.");
@@ -305,7 +318,8 @@ function submitResponse(payload) {
     examId,
     studentCode,
     JSON.stringify(normalizedAnswers),
-    String(payload.userAgent || 'unknown')
+    String(payload.userAgent || 'unknown'),
+    version
   ]);
 
   return { saved: true };
@@ -326,6 +340,7 @@ function getAdminState(code, requestedExamId, lang) {
     examId: cfg.examId,
     examName: cfg.examName,
     nQuestions: cfg.nQuestions,
+    versionCount: cfg.versionCount,
     manualState: cfg.manualState,
     status: buildExamStatus_(cfg, now, lang)
   }));
@@ -350,6 +365,7 @@ function getAdminState(code, requestedExamId, lang) {
     keyPresent: false,
     keyError: '',
     keyValue: '',
+    keysByVersion: {},
     submissions: { total: 0, lastTimestamp: '' },
     configError: '',
     baseUrl: getBaseUrl_()
@@ -369,6 +385,7 @@ function getAdminState(code, requestedExamId, lang) {
     examId: config.examId,
     examName: config.examName,
     nQuestions: config.nQuestions,
+    versionCount: config.versionCount,
     options: config.options,
     optionsString: config.options.join(''),
     startIso: config.startIso,
@@ -386,9 +403,9 @@ function getAdminState(code, requestedExamId, lang) {
   state.submissions = getSubmissionStatsForExam_(config.examId);
 
   try {
-    const keyArray = getAnswerKey_(config.examId, config);
-    state.keyPresent = true;
-    state.keyValue = keyArray.join('');
+    state.keysByVersion = getAnswerKeys_(config.examId, config);
+    state.keyPresent = Object.keys(state.keysByVersion).length > 0;
+    state.keyValue = state.keysByVersion['1'] || '';
   } catch (keyErr) {
     const defaultKeyMissing = "Encara no s'ha definit la clau per a aquest examen.";
     const localizedKeyMissing = adminLocale === 'es'
@@ -425,7 +442,8 @@ function getSubmissionListForAdmin(code, examId) {
     items.push({
       timestamp: ts instanceof Date && !isNaN(ts.getTime()) ? ts.getTime() : 0,
       timestampStr: (ts instanceof Date && !isNaN(ts.getTime())) ? Utilities.formatDate(ts, tz, 'yyyy-MM-dd HH:mm:ss') : '',
-      studentCode: code
+      studentCode: code,
+      version: Number(row[5]) || 1
     });
   });
   items.sort((a, b) => b.timestamp - a.timestamp);
@@ -441,7 +459,7 @@ function createExamForAdmin(code) {
   ensureSheets_();
   const sheet = getSheet_(SHEET_NAMES.CONFIG);
   const examId = generateExamId_();
-  const defaultRow = [examId, '', 10, 'ABCD', '', '', 'auto', false, false, true, 10, 5, false, 0.3333333333];
+  const defaultRow = [examId, '', 10, 'ABCD', '', '', 'auto', false, false, true, 10, 5, false, 0.3333333333, 1];
   sheet.appendRow(defaultRow);
   try {
     updateAllScheduleTriggers_();
@@ -461,6 +479,18 @@ function saveConfigForAdmin(code, payload) {
   const sheet = getSheet_(SHEET_NAMES.CONFIG);
   const values = sheet.getDataRange().getValues();
 
+  if (examId) {
+    const submissions = getExamSheetValues_('Submissions', SHEET_HEADERS.Submissions, examId);
+    const highestUsedVersion = submissions.reduce((highest, row) => {
+      if (!sameExamId_(row[1], examId)) return highest;
+      const version = Number(row[5]) || 1;
+      return Math.max(highest, Number.isInteger(version) ? version : 1);
+    }, 1);
+    if (valid.versionCount < highestUsedVersion) {
+      throw new Error('No puedes reducir las versiones por debajo de la versión usada en los envíos ya recibidos.');
+    }
+  }
+
   if (!examId) {
     examId = generateExamId_();
     sheet.appendRow([
@@ -477,7 +507,8 @@ function saveConfigForAdmin(code, payload) {
       valid.gradeMax,
       valid.passThreshold,
       false, // penalize_wrong (es manté via botó específic)
-      0      // penalty_value
+      0,     // penalty_value
+      valid.versionCount
     ]);
     return getAdminState(code, examId);
   }
@@ -503,7 +534,8 @@ function saveConfigForAdmin(code, payload) {
           valid.gradeMax,
           valid.passThreshold,
           existingPenalize,
-          existingPenalty
+          existingPenalty,
+          valid.versionCount
         ]
       ]);
       updated = true;
@@ -525,7 +557,8 @@ function saveConfigForAdmin(code, payload) {
       valid.gradeMax,
       valid.passThreshold,
       false,
-      0
+      0,
+      valid.versionCount
     ]);
   }
   try {
@@ -536,7 +569,7 @@ function saveConfigForAdmin(code, payload) {
   return getAdminState(code, examId);
 }
 
-function saveAnswerKeyForAdmin(code, examId, keyInput) {
+function saveAnswerKeyForAdmin(code, examId, keyInput, version) {
   checkAdminCode_(code);
   ensureSheets_();
   examId = String(examId || '').trim();
@@ -544,8 +577,9 @@ function saveAnswerKeyForAdmin(code, examId, keyInput) {
     throw new Error('Selecciona un examen abans de desar la clau.');
   }
   const config = getExamConfig_(examId);
+  const selectedVersion = normalizeExamVersion_(version, config.versionCount);
   const keyArray = normalizeKeyInput_(keyInput, config);
-  writeKey_(examId, keyArray);
+  writeKey_(examId, keyArray, selectedVersion);
   return getAdminState(code, examId);
 }
 
@@ -909,7 +943,9 @@ function getExamConfig_(examId) {
   let passThreshold = Number(row[CONFIG_COLUMNS.PASS_THRESHOLD - 1]);
   if (!Number.isFinite(passThreshold) || passThreshold < 0) { passThreshold = 5; }
   if (passThreshold > gradeMax) { passThreshold = gradeMax; }
-  const penalizeWrong = normalizeBooleanInput_(row[CONFIG_COLUMNS.PENALIZE_WRONG - 1]);
+    const penalizeWrong = normalizeBooleanInput_(row[CONFIG_COLUMNS.PENALIZE_WRONG - 1]);
+    let versionCount = Number(row[CONFIG_COLUMNS.VERSION_COUNT - 1]);
+    if (!Number.isInteger(versionCount) || versionCount < 1 || versionCount > 10) versionCount = 1;
   let penaltyValue = Number(row[CONFIG_COLUMNS.PENALTY_VALUE - 1]);
   if (!Number.isFinite(penaltyValue) || penaltyValue < 0) {
     penaltyValue = options.length > 1 ? (1 / (options.length - 1)) : 0;
@@ -929,7 +965,8 @@ function getExamConfig_(examId) {
       gradeMax: gradeMax,
       passThreshold: passThreshold,
       penalizeWrong: penalizeWrong,
-      penaltyValue: penaltyValue
+      penaltyValue: penaltyValue,
+      versionCount: versionCount
     };
   }
   throw new Error('No s\'ha trobat cap examen amb aquest identificador.');
@@ -969,20 +1006,77 @@ function examIdExists_(examId) {
   return false;
 }
 
-function getAnswerKey_(examId, config) {
+function getAnswerKey_(examId, config, version) {
+  const selectedVersion = normalizeExamVersion_(version, config.versionCount);
+  const versions = getStoredAnswerKeys_(examId);
+  const rawKey = versions[String(selectedVersion)];
+  if (!rawKey) {
+    const missing = selectedVersion === 1
+      ? 'Encara no s\'ha definit la clau per a aquest examen.'
+      : 'Encara no s\'ha definit la clau per a la versió ' + selectedVersion + '.';
+    throw new Error(missing);
+  }
+  return parseKey_(rawKey, config.nQuestions, config.options);
+}
+
+function getAnswerKeys_(examId, config) {
+  const stored = getStoredAnswerKeys_(examId);
+  const result = {};
+  for (let version = 1; version <= config.versionCount; version++) {
+    const rawKey = stored[String(version)];
+    if (!rawKey) continue;
+    try {
+      result[String(version)] = parseKey_(rawKey, config.nQuestions, config.options).join('');
+    } catch (e) {
+      // Una clau malformada no s'ofereix a l'alumnat fins que es corregeixi.
+    }
+  }
+  return result;
+}
+
+function getConfiguredExamVersions_(config) {
+  return Object.keys(getAnswerKeys_(config.examId, config)).map(Number).sort((a, b) => a - b);
+}
+
+function normalizeExamVersion_(value, versionCount) {
+  const version = value === '' || value === null || value === undefined ? 1 : Number(value);
+  const maximum = Number.isInteger(versionCount) ? versionCount : 1;
+  if (!Number.isInteger(version) || version < 1 || version > maximum || maximum > 10) {
+    throw new Error('La versión seleccionada no es válida.');
+  }
+  return version;
+}
+
+function getStoredAnswerKeys_(examId) {
   const sheet = getSheet_(SHEET_NAMES.KEYS);
   const values = sheet.getDataRange().getValues();
   for (let i = 1; i < values.length; i++) {
     if (sameExamId_(values[i][0], examId)) {
-      return parseKey_(values[i][1], config.nQuestions, config.options);
+      const raw = values[i][1];
+      try {
+        const parsed = typeof raw === 'string' ? JSON.parse(raw) : raw;
+        // Compatibility with the original format, which stored one answer array.
+        if (Array.isArray(parsed)) return { '1': parsed.join('') };
+        if (parsed && typeof parsed === 'object') {
+          const result = {};
+          Object.keys(parsed).forEach(key => {
+            const version = Number(key);
+            if (!Number.isInteger(version) || version < 1 || version > 10) return;
+            result[String(version)] = Array.isArray(parsed[key]) ? parsed[key].join('') : String(parsed[key] || '');
+          });
+          return result;
+        }
+      } catch (e) {
+        // Invalid stored data behaves like a missing key and can be replaced in the panel.
+      }
+      return {};
     }
   }
-  throw new Error('Encara no s\'ha definit la clau per a aquest examen.');
+  return {};
 }
 
 
 function corregirExamenCore_(config, lang) {
-  const key = getAnswerKey_(config.examId, config);
   const values = getExamSheetValues_('Submissions', SHEET_HEADERS.Submissions, config.examId);
   const rows = [];
   const tx = i18n_(lang);
@@ -991,6 +1085,8 @@ function corregirExamenCore_(config, lang) {
     if (!sameExamId_(row[1], config.examId)) {
       return;
     }
+    const version = normalizeExamVersion_(row[5], config.versionCount);
+    const key = getAnswerKey_(config.examId, config, version);
     const answers = parseAnswers_(row[3], config.nQuestions);
     let correct = 0;
     let incorrect = 0;
@@ -1014,6 +1110,7 @@ function corregirExamenCore_(config, lang) {
     rows.push([
       row[0],
       row[2],
+      version,
       correct,
       incorrect,
       blank,
@@ -1036,9 +1133,8 @@ function corregirExamenCore_(config, lang) {
 }
 
 function analisiPerPreguntaCore_(config, lang) {
-  const key = getAnswerKey_(config.examId, config);
   const values = getExamSheetValues_('Submissions', SHEET_HEADERS.Submissions, config.examId);
-  const stats = key.map(() => ({ total: 0, correct: 0, incorrect: 0, blank: 0 }));
+  const statsByVersion = {};
   let hasData = false;
   const tx = i18n_(lang);
 
@@ -1046,6 +1142,12 @@ function analisiPerPreguntaCore_(config, lang) {
     if (!sameExamId_(row[1], config.examId)) {
       return;
     }
+    const version = normalizeExamVersion_(row[5], config.versionCount);
+    const key = getAnswerKey_(config.examId, config, version);
+    if (!statsByVersion[version]) {
+      statsByVersion[version] = key.map(() => ({ total: 0, correct: 0, incorrect: 0, blank: 0 }));
+    }
+    const stats = statsByVersion[version];
     const answers = parseAnswers_(row[3], config.nQuestions);
     hasData = true;
     answers.forEach((answer, index) => {
@@ -1062,14 +1164,18 @@ function analisiPerPreguntaCore_(config, lang) {
     });
   });
 
-  const summaryRows = stats.map((stat, index) => ({
-    question: index + 1,
-    responses: stat.total + stat.blank,
-    correct: stat.correct,
-    incorrect: stat.incorrect,
-    blank: stat.blank,
-    percent: (stat.total + stat.blank) ? stat.correct / (stat.total + stat.blank) : 0
-  }));
+  const summaryRows = [];
+  Object.keys(statsByVersion).map(Number).sort((a, b) => a - b).forEach(version => {
+    statsByVersion[version].forEach((stat, index) => summaryRows.push({
+      version: version,
+      question: index + 1,
+      responses: stat.total + stat.blank,
+      correct: stat.correct,
+      incorrect: stat.incorrect,
+      blank: stat.blank,
+      percent: (stat.total + stat.blank) ? stat.correct / (stat.total + stat.blank) : 0
+    }));
+  });
 
   if (hasData) {
     return {
@@ -1326,7 +1432,7 @@ function writeCorrectionTable_(sheet, rows, gradeMax, passThreshold, config, lan
   const n = Number(config.nQuestions) || 0;
   const gMax = Number(gradeMax) || (Number(config.gradeMax) || 10);
   const tx = i18n_(lang);
-  const header = [tx.colDate, tx.colStudent];
+  const header = [tx.colDate, tx.colStudent, tx.versionLabel];
   for (let i = 1; i <= n; i++) header.push('Q' + i);
   header.push(tx.colCorrect, tx.colWrong, tx.colBlank, tx.colScorePrefix + '0-' + gMax + ')');
   const totalColumns = header.length;
@@ -1352,13 +1458,14 @@ function writeCorrectionTable_(sheet, rows, gradeMax, passThreshold, config, lan
   }
 
   // Body: deriveix de Submissions i la clau
-  const key = getAnswerKey_(config.examId, config);
   const subs = getExamSheetValues_('Submissions', SHEET_HEADERS.Submissions, config.examId);
   const bodyRows = [];
   const wrongMatrix = [];
   const scores = [];
   subs.forEach(row => {
     if (!sameExamId_(row[1], config.examId)) return;
+    const version = normalizeExamVersion_(row[5], config.versionCount);
+    const key = getAnswerKey_(config.examId, config, version);
     const timestamp = row[0];
     const student = String(row[2] || '').trim();
     const answers = parseAnswers_(row[3], n);
@@ -1375,17 +1482,19 @@ function writeCorrectionTable_(sheet, rows, gradeMax, passThreshold, config, lan
     if (!Number.isFinite(effective)) effective = 0;
     effective = Math.max(0, Math.min(n, effective));
     const score = Math.round(((effective / n) * gMax) * 100) / 100;
-    bodyRows.push([timestamp, student].concat(display).concat([correct, incorrect, blank, score]));
+    bodyRows.push([timestamp, student, version].concat(display).concat([correct, incorrect, blank, score]));
     wrongMatrix.push(wrongRow);
     scores.push(score);
   });
   // Afegeix fila de clau com a model
-  const keyRow = (function(){
-    const arr = ['', tx.keyLabel];
-    for (let i = 0; i < n; i++) arr.push(String(key[i] || '').toUpperCase());
-    arr.push('', '', '', '');
-    return arr;
-  })();
+  const keyRows = [];
+  Object.keys(getAnswerKeys_(config.examId, config)).map(Number).sort((a, b) => a - b).forEach(version => {
+    const key = getAnswerKey_(config.examId, config, version);
+    const row = ['', tx.keyLabel + ' ' + version, version];
+    for (let i = 0; i < n; i++) row.push(String(key[i] || '').toUpperCase());
+    row.push('', '', '', '');
+    keyRows.push(row);
+  });
   // Ordena per codi alumne (alfabètic)
   if (bodyRows.length) {
     const idx = bodyRows.map((r, i) => ({ i, code: String(r[1] || '').toLowerCase() }));
@@ -1403,7 +1512,7 @@ function writeCorrectionTable_(sheet, rows, gradeMax, passThreshold, config, lan
     scores.length = 0; Array.prototype.push.apply(scores, scoresSorted);
   }
   const countRows = bodyRows.length; // alumnes
-  const totalRows = countRows + 1; // + clau
+  const totalRows = countRows + keyRows.length;
   // Ara que coneixem quantes files calen, assegurem capacitat
   {
     const needRows = Math.max(startRow + 1, startRow + totalRows);
@@ -1412,37 +1521,38 @@ function writeCorrectionTable_(sheet, rows, gradeMax, passThreshold, config, lan
     }
   }
   if (countRows) {
-    const withKey = [keyRow].concat(bodyRows);
+    const withKey = keyRows.concat(bodyRows);
     sheet.getRange(startRow + 1, 1, totalRows, totalColumns).setValues(withKey);
     sheet.getRange(startRow + 1, 1, totalRows, 1).setNumberFormat('dd/MM/yyyy HH:mm');
     sheet.getRange(startRow + 1, 2, totalRows, 1).setHorizontalAlignment('left');
-    if (n > 0) sheet.getRange(startRow + 1, 3, totalRows, n).setHorizontalAlignment('center');
-    sheet.getRange(startRow + 1, 3 + n, totalRows, 3).setHorizontalAlignment('center');
-    sheet.getRange(startRow + 1, 6 + n, totalRows, 1).setNumberFormat('0.00');
+    sheet.getRange(startRow + 1, 3, totalRows, 1).setHorizontalAlignment('center');
+    if (n > 0) sheet.getRange(startRow + 1, 4, totalRows, n).setHorizontalAlignment('center');
+    sheet.getRange(startRow + 1, 4 + n, totalRows, 3).setHorizontalAlignment('center');
+    sheet.getRange(startRow + 1, 7 + n, totalRows, 1).setNumberFormat('0.00');
     sheet.getRange(startRow, 1, totalRows + 1, totalColumns).setBorder(true, true, true, true, true, true);
     // Ressalta la fila de clau
     try {
       sheet.getRange(startRow + 1, 1, 1, totalColumns).setBackground('#fff8e1');
-      sheet.getRange(startRow + 1, 2, 1, 1).setFontWeight('bold');
+      sheet.getRange(startRow + 1, 2, keyRows.length, 1).setFontWeight('bold');
     } catch (e) {}
     // Elimina qualsevol filtre existent per evitar ordenar la fila "Clau"
     try { const existing = sheet.getFilter(); if (existing) existing.remove(); } catch (e) {}
     // Colors d'errors en les respostes
     try {
       for (let r = 0; r < countRows; r++) {
-        const rowIdx = startRow + 1 + 1 + r; // salta clau
+        const rowIdx = startRow + 1 + keyRows.length + r;
         for (let c = 0; c < n; c++) {
           if (wrongMatrix[r][c]) {
-            sheet.getRange(rowIdx, 3 + c, 1, 1).setBackground('#fdecea').setFontColor('#c62828');
+            sheet.getRange(rowIdx, 4 + c, 1, 1).setBackground('#fdecea').setFontColor('#c62828');
           }
         }
       }
     } catch (e) {}
     // Colors de nota segons aprovat/suspès
     try {
-      const gradeCol = 6 + n;
+      const gradeCol = 7 + n;
       const thr = Number(passThreshold);
-      const gradeRange = sheet.getRange(startRow + 1 + 1, gradeCol, countRows, 1);
+      const gradeRange = sheet.getRange(startRow + 1 + keyRows.length, gradeCol, countRows, 1);
       const bg = [], fg = [];
       for (let i = 0; i < scores.length; i++) {
         const v = Number(scores[i]) || 0;
@@ -1573,7 +1683,7 @@ function writeCorrectionTable_(sheet, rows, gradeMax, passThreshold, config, lan
 
 function writeAnalysisTable_(sheet, summaryRows, config, lang) {
   const tx = i18n_(lang);
-  const header = [tx.hQuestion, tx.hCorrect, tx.hWrong, tx.hBlank, tx.hPercent];
+  const header = [tx.hQuestion, tx.hCorrect, tx.hWrong, tx.hBlank, tx.hPercent, tx.versionLabel];
   const totalColumns = header.length;
   const countRows = summaryRows && summaryRows.length ? summaryRows.length : 0;
 
@@ -1594,11 +1704,12 @@ function writeAnalysisTable_(sheet, summaryRows, config, lang) {
     sheet.getRange(startRow + 1, 1, sheet.getMaxRows() - startRow, sheet.getMaxColumns()).clearContent();
   }
   if (countRows) {
-    const values = summaryRows.map(r => [r.question, r.correct, r.incorrect, r.blank, r.percent]);
+    const values = summaryRows.map(r => [r.question, r.correct, r.incorrect, r.blank, r.percent, r.version]);
     sheet.getRange(startRow + 1, 1, values.length, totalColumns).setValues(values)
       .setHorizontalAlignment('center');
     sheet.getRange(startRow + 1, 1, values.length, 4).setNumberFormat('0');
     sheet.getRange(startRow + 1, 5, values.length, 1).setNumberFormat('0.##%');
+    sheet.getRange(startRow + 1, 6, values.length, 1).setNumberFormat('0');
     sheet.getRange(startRow, 1, values.length + 1, totalColumns).setBorder(true, true, true, true, true, true);
   }
   try { sheet.autoResizeColumns(1, totalColumns); } catch (err) {}
@@ -1610,15 +1721,23 @@ function writeAnalysisTable_(sheet, summaryRows, config, lang) {
   sheet.getRange(1, startCol, 1, 2).setValues(statsHeader)
     .setFontWeight('bold')
     .setBackground('#f1f8e9');
-  let avgPct = 0, hardest = [];
+  let statsRows = [], hardest = [];
   if (countRows) {
-    const pcts = summaryRows.map(r => Number(r.percent) || 0);
-    avgPct = pcts.reduce((a,b)=>a+b,0) / pcts.length;
-    hardest = summaryRows.slice().sort((a,b)=>(a.percent - b.percent)).slice(0, Math.min(5, summaryRows.length));
+    const versions = Array.from(new Set(summaryRows.map(r => Number(r.version) || 1))).sort((a, b) => a - b);
+    statsRows = versions.map(version => {
+      const rows = summaryRows.filter(row => Number(row.version) === version);
+      const avg = rows.reduce((sum, row) => sum + (Number(row.percent) || 0), 0) / rows.length;
+      return [tx.hAvgCorrect + ' (V' + version + ')', avg];
+    });
+    versions.forEach(version => {
+      const versionRows = summaryRows.filter(row => Number(row.version) === version);
+      versionRows.sort((a, b) => a.percent - b.percent).slice(0, Math.min(5, versionRows.length)).forEach(row => {
+        hardest.push(Object.assign({}, row, { version: version }));
+      });
+    });
   }
-  const statsRows = [ [tx.hAvgCorrect, avgPct] ];
-  sheet.getRange(2, startCol, statsRows.length, 2).setValues(statsRows);
-  sheet.getRange(2, startCol + 1, 1, 1).setNumberFormat('0.##%');
+  if (statsRows.length) sheet.getRange(2, startCol, statsRows.length, 2).setValues(statsRows);
+  if (statsRows.length) sheet.getRange(2, startCol + 1, statsRows.length, 1).setNumberFormat('0.##%');
   sheet.getRange(1, startCol, statsRows.length + 1, 2).setBorder(true, true, true, true, true, true);
 
   // Llista de preguntes més difícils
@@ -1628,7 +1747,7 @@ function writeAnalysisTable_(sheet, summaryRows, config, lang) {
     sheet.getRange(1, startCol2, 1, 2).setValues(hardHeader)
       .setFontWeight('bold')
       .setBackground('#fdecea');
-    const hardRows = hardest.map(r => ['#' + r.question, r.percent]);
+    const hardRows = hardest.map(r => ['V' + r.version + ' · #' + r.question, r.percent]);
     sheet.getRange(2, startCol2, hardRows.length, 2).setValues(hardRows);
     sheet.getRange(2, startCol2 + 1, hardRows.length, 1).setNumberFormat('0.##%');
     sheet.getRange(1, startCol2, hardRows.length + 1, 2).setBorder(true, true, true, true, true, true);
@@ -1637,7 +1756,7 @@ function writeAnalysisTable_(sheet, summaryRows, config, lang) {
   // Gràfic: columnes apilades (Correctes, Incorrectes, En blanc)
   if (countRows) {
     try {
-      const range = sheet.getRange(startRow, 1, countRows + 1, 4); // taula resum per pregunta
+    const range = sheet.getRange(startRow, 1, countRows + 1, 4); // pregunta, encerts, errors i blancs per versió
       const chart = sheet.newChart()
         .setChartType(Charts.ChartType.COLUMN)
         .addRange(range)
@@ -1768,18 +1887,33 @@ function getExistingExamSheet_(baseName, examId) {
 function ensureSheetHeader_(sheet, header) {
   const headerLength = header.length;
   const existing = sheet.getRange(1, 1, 1, headerLength).getValues()[0];
-  let matches = existing.length >= headerLength;
+  let matches = true;
   if (matches) {
+    let foundHeaderCell = false;
     for (let i = 0; i < headerLength; i++) {
+      if (!String(existing[i] || '').trim()) {
+        matches = false;
+        break;
+      }
+      foundHeaderCell = true;
       if (String(existing[i] || '').toLowerCase() !== header[i].toLowerCase()) {
         matches = false;
         break;
       }
     }
+    // Allow appending new columns to an existing table without clearing historic submissions.
+    if (!foundHeaderCell) matches = false;
   }
   if (!matches) {
-    sheet.clearContents();
-    sheet.getRange(1, 1, 1, headerLength).setValues([header]);
+    const existingHeader = existing.map(value => String(value || '').trim()).filter(Boolean);
+    const isCompatiblePrefix = existingHeader.length > 0 && existingHeader.length < headerLength &&
+      existingHeader.every((value, index) => value.toLowerCase() === header[index].toLowerCase());
+    if (isCompatiblePrefix) {
+      sheet.getRange(1, 1, 1, headerLength).setValues([header]);
+    } else {
+      sheet.clearContents();
+      sheet.getRange(1, 1, 1, headerLength).setValues([header]);
+    }
   }
   trimSheet_(sheet, headerLength);
 }
@@ -1815,7 +1949,7 @@ function getExamSheetValues_(baseName, header, examId) {
     return [];
   }
   const firstRow = values[0];
-  const headerMatches = header.every((title, index) => String(firstRow[index] || '').toLowerCase() === title.toLowerCase());
+  const headerMatches = firstRow.length <= header.length && firstRow.every((title, index) => String(title || '').toLowerCase() === header[index].toLowerCase());
   const startIndex = headerMatches ? 1 : 0;
   if (startIndex >= values.length) {
     return [];
@@ -2218,6 +2352,10 @@ function validateConfigPayload_(raw) {
   const shuffleQuestions = normalizeBooleanInput_(raw.shuffleQuestions);
   const shuffleAnswers = normalizeBooleanInput_(raw.shuffleAnswers);
   const enforceFullscreen = normalizeBooleanInput_(raw.enforceFullscreen);
+  let versionCount = Number(raw.versionCount);
+  if (!Number.isInteger(versionCount) || versionCount < 1 || versionCount > 10) {
+    throw new Error('El número de versiones debe ser un entero entre 1 y 10.');
+  }
   let gradeMax = Number(raw.gradeMax);
   if (!Number.isFinite(gradeMax) || gradeMax <= 0) { gradeMax = 10; }
   let passThreshold = Number(raw.passThreshold);
@@ -2235,14 +2373,16 @@ function validateConfigPayload_(raw) {
     shuffleAnswers: shuffleAnswers,
     enforceFullscreen: enforceFullscreen,
     gradeMax: gradeMax,
-    passThreshold: passThreshold
+    passThreshold: passThreshold,
+    versionCount: versionCount
   };
 }
 
 
-function writeKey_(examId, keyArray) {
-  const keyJson = JSON.stringify(keyArray);
-  upsertKeyRow_(examId, keyJson);
+function writeKey_(examId, keyArray, version) {
+  const versions = getStoredAnswerKeys_(examId);
+  versions[String(Number(version) || 1)] = keyArray.join('');
+  upsertKeyRow_(examId, JSON.stringify(versions));
 }
 
 function normalizeKeyInput_(raw, config) {

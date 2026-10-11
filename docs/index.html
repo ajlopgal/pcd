@@ -210,6 +210,7 @@
                     <li><strong>Nom de l'examen</strong>: un títol per identificar-lo (ex. "Examen Biologia Tema 5").</li>
                     <li><strong>Nombre de preguntes</strong>: el total de preguntes que té la prova.</li>
                     <li><strong>Opcions disponibles</strong>: les lletres de les respostes (ex. ABCD, ABCDE).</li>
+                    <li><strong>Versions de l'examen</strong>: indica quants models en paper hi ha, entre 1 i 10. Desa la configuració abans de carregar les claus.</li>
                     <li><strong>Inici i fi programat</strong>: pots definir una data i hora perquè l'examen s'obri i es tanqui automàticament. Si ho deixes en blanc, hauràs d'obrir-lo i tancar-lo manualment. Encara que estableixis una data, sempre pots forçar l'obertura o el tancament des dels controls manuals.</li>
                     <li><strong>Mesures de seguretat</strong>: pots activar opcions com barrejar preguntes i/o respostes, o forçar la pantalla completa (encara que l'alumne pot sortir d'aquest mode, la finestra es tornarà a maximitzar amb cada clic que faci a la prova).</li>
                 </ul>
@@ -217,7 +218,7 @@
                 <h3>3. Pestanya Respostes: introduir la clau i corregir</h3>
                 <p>Aquesta pestanya té tres apartats. No cal omplir-los abans que els alumnes facin l'examen, pots completar-los just abans de generar l'informe de correcció.</p>
                 <ul>
-                    <li><strong>Clau de respostes</strong>: introdueix la seqüència de respostes correctes (ex. "BCAD...").</li>
+                    <li><strong>Clau de respostes</strong>: selecciona cada versió i desa'n la seqüència de respostes correctes (ex. "BCAD..."). L'alumnat seleccionarà la seva versió al formulari; la correcció i l'anàlisi s'ajustaran a aquesta clau.</li>
                     <li><strong>Criteris de qualificació</strong>: defineix la nota màxima (ex. 10) i la nota mínima per aprovar (ex. 5).</li>
                     <li><strong>Penalització per atzar</strong>: si vols que les respostes incorrectes restin, activa la casella i defineix el valor de la penalització. Aquesta mesura busca desincentivar que es respongui a l'atzar. El valor de penalització recomanat, que anul·la el guany esperat per respondre a l'atzar, es calcula amb la fórmula següent, on 'm' és el nombre d'opcions de resposta:
                         $$ \frac{1}{m-1} $$
@@ -226,6 +227,7 @@
                     </li>
                 </ul>
                 <p>Un cop els alumnes hagin respost, prem el botó <strong>Genera informe de correcció</strong> per obtenir els resultats. Es crearà un nou Full de Càlcul al teu Drive amb l'informe detallat.</p>
+                <p>L'informe inclou la versió de cada alumne i presenta l'anàlisi de preguntes separada per versió.</p>
                 <h3>4. Pestanya Ajustos: gestió de l'aplicació</h3>
                 <p>Aquesta darrera pestanya conté opcions per administrar l'aplicació i les seves dades. És recomanable fer servir aquestes funcions amb precaució.</p>
                 <ul>
@@ -332,6 +334,7 @@
                     <li><strong>Nombre del examen</strong>: un título para identificarlo (ej. "Examen Biología Tema 5").</li>
                     <li><strong>Número de preguntas</strong>: el total de preguntas que tiene la prueba.</li>
                     <li><strong>Opciones disponibles</strong>: las letras de las respuestas (ej. ABCD, ABCDE).</li>
+                    <li><strong>Versiones del examen</strong>: indica cuántos modelos en papel hay, entre 1 y 10. Guarda la configuración antes de cargar las claves.</li>
                     <li><strong>Inicio y fin programado</strong>: puedes definir una fecha y hora para que el examen se abra y se cierre automáticamente. Si lo dejas en blanco, tendrás que abrirlo y cerrarlo manualmente. Aunque establezcas una fecha, siempre puedes forzar la apertura o el cierre desde los controles manuales.</li>
                     <li><strong>Medidas de seguridad</strong>: puedes activar opciones como barajar preguntas y/o respuestas, o forzar la pantalla completa (aunque el alumno puede salir de este modo, la ventana se volverá a maximizar con cada clic que haga en la prueba).</li>
                 </ul>
@@ -339,7 +342,7 @@
                 <h3>3. Pestaña Respuestas: introducir la clave y corregir</h3>
                 <p>Esta pestaña tiene tres apartados. No es necesario rellenarlos antes de que los alumnos hagan el examen, puedes completarlos justo antes de generar el informe de corrección.</p>
                 <ul>
-                    <li><strong>Clave de respuestas</strong>: introduce la secuencia de respuestas correctas (ej. "BCAD...").</li>
+                    <li><strong>Clave de respuestas</strong>: selecciona cada versión y guarda su secuencia de respuestas correctas (ej. "BCAD..."). El alumnado seleccionará su versión en el formulario; la corrección y el análisis usarán esa clave.</li>
                     <li><strong>Criterios de calificación</strong>: define la nota máxima (ej. 10) y la nota mínima para aprobar (ej. 5).</li>
                     <li><strong>Penalización por azar</strong>: si quieres que las respuestas incorrectas resten, activa la casilla y define el valor de la penalización. Esta medida busca desincentivar que se responda al azar. El valor de penalización recomendado, que anula la ganancia esperada por responder al azar, se calcula con la siguiente fórmula, donde 'm' es el número de opciones de respuesta:
                         $$ \frac{1}{m-1} $$
@@ -348,6 +351,7 @@
                     </li>
                 </ul>
                 <p>Una vez que los alumnos hayan respondido, pulsa el botón <strong>Generar informe de corrección</strong> para obtener los resultados. Se creará una nueva Hoja de Cálculo en tu Drive con el informe detallado.</p>
+                <p>El informe incluye la versión de cada alumno y presenta el análisis de preguntas separado por versión.</p>
                 <h3>4. Pestaña Ajustes: gestión de la aplicación</h3>
                 <p>Esta última pestaña contiene opciones para administrar la aplicación y sus datos. Es recomendable usar estas funciones con precaución.</p>
                 <ul>
