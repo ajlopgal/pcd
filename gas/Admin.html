@@ -206,7 +206,7 @@
               <input type="text" id="options" autocomplete="off" placeholder="ABCDE" required />
             </div>
             <div>
-              <label for="versions-count" data-i18n="versions_count">Versiones del examen (1–10)</label>
+              <label for="versions-count" data-i18n="versions_count">Modelos del examen (1–10)</label>
               <input type="number" id="versions-count" min="1" max="10" step="1" value="1" required />
             </div>
             <div>
@@ -276,7 +276,7 @@
           </div>
           <h2 data-i18n="answer_key">Clave de respuestas</h2>
           <p data-i18n="answer_key_help">Pega la cadena de respuestas correctas (sin espacios) o las letras separadas por espacios.</p>
-          <label for="key-version-selector" data-i18n="key_version">Versión de la clave</label>
+          <label for="key-version-selector" data-i18n="key_version">Modelo de la clave</label>
           <select id="key-version-selector"></select>
           <label for="key-input" data-i18n="key_label">Clave</label>
           <textarea id="key-input" placeholder="ABCDE..."></textarea>
@@ -407,8 +407,8 @@
           exam_name: "Nom de l'examen",
           n_questions: 'Nombre de preguntes',
           options: 'Opcions disponibles (ex. ABCDE)',
-          versions_count: 'Versions de l’examen (1–10)',
-          key_version: 'Versió de la clau',
+          versions_count: 'Models de l’examen (1–10)',
+          key_version: 'Model de la clau',
           start: 'Inici programat',
           end: 'Fi programada',
           security: 'Mesures de seguretat',
@@ -429,8 +429,8 @@
           copy_failed: "No s'ha pogut copiar l'enllaç. Copia'l manualment.",
           student_link_hint: "Comparteix l'enllaç quan la configuració estigui preparada i l'examen estigui obert.",
           answer_key: 'Clau de respostes',
-          answer_key_help: 'Desa primer el nombre de versions. Després enganxa la clau corresponent a la versió seleccionada.',
-          key_version_option: 'Versió %N%',
+          answer_key_help: 'Desa primer el nombre de models. Després enganxa la clau corresponent al model seleccionat.',
+          key_version_option: 'Model %N%',
           key_label: 'Clau',
           save_key: 'Desa la clau',
           grading_title: 'Criteris de qualificació',
@@ -459,7 +459,7 @@
           reset_all_btn: 'Esborra tot',
           sub_col_date: 'Data',
           sub_col_student: 'Codi alumne',
-          sub_col_version: 'Versió',
+          sub_col_version: 'Model',
           config_unsaved_hint: 'Hi ha canvis sense desar. Prem «Desa la configuració» per aplicar-los.',
           save_config_tooltip: 'Tens canvis sense desar',
           grading_unsaved_hint: 'Hi ha canvis de qualificació sense desar. Prem «Desa criteris de nota».',
@@ -529,8 +529,8 @@
           exam_name: 'Nombre del examen',
           n_questions: 'Número de preguntas',
           options: 'Opciones disponibles (ej. ABCDE)',
-          versions_count: 'Versiones del examen (1–10)',
-          key_version: 'Versión de la clave',
+          versions_count: 'Modelos del examen (1–10)',
+          key_version: 'Modelo de la clave',
           start: 'Inicio programado',
           end: 'Fin programado',
           security: 'Medidas de seguridad',
@@ -551,8 +551,8 @@
           copy_failed: 'No se ha podido copiar el enlace. Cópialo manualmente.',
           student_link_hint: 'Comparte el enlace cuando la configuración esté lista y el examen abierto.',
           answer_key: 'Clave de respuestas',
-          answer_key_help: 'Guarda primero el número de versiones. Después pega la clave de la versión seleccionada.',
-          key_version_option: 'Versión %N%',
+          answer_key_help: 'Guarda primero el número de modelos. Después pega la clave del modelo seleccionado.',
+          key_version_option: 'Modelo %N%',
           key_label: 'Clave',
           save_key: 'Guardar clave',
           grading_title: 'Criterios de calificación',
@@ -581,7 +581,7 @@
           reset_all_btn: 'Borrar todo',
           sub_col_date: 'Fecha',
           sub_col_student: 'Código alumno',
-          sub_col_version: 'Versión',
+          sub_col_version: 'Modelo',
           config_unsaved_hint: 'Hay cambios sin guardar. Pulsa «Guardar configuración» para aplicarlos.',
           save_config_tooltip: 'Tienes cambios sin guardar',
           grading_unsaved_hint: 'Hay cambios de calificación sin guardar. Pulsa «Guardar criterios».',
@@ -1827,7 +1827,7 @@
             td2.textContent = it.studentCode || '';
             td2.style.padding = '4px 6px';
             const td3 = document.createElement('td');
-            td3.textContent = 'V' + (Number(it.version) || 1);
+            td3.textContent = 'M' + (Number(it.version) || 1);
             td3.style.padding = '4px 6px';
             tr.appendChild(td1);
             tr.appendChild(td2);

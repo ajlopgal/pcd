@@ -75,8 +75,8 @@ function i18n_(lang) {
     colBlank: 'En blanc',
     colScorePrefix: 'Nota (',
     keyLabel: 'Clau',
-    versionLabel: 'Versió',
-    versionPrompt: 'Selecciona la versió del teu examen.',
+    versionLabel: 'Model',
+    versionPrompt: 'Selecciona el model del teu examen.',
     hQuestion: 'Pregunta',
     hResponses: 'Respostes',
     hCorrect: 'Encerts',
@@ -145,8 +145,8 @@ function i18n_(lang) {
     colBlank: 'En blanco',
     colScorePrefix: 'Nota (',
     keyLabel: 'Clave',
-    versionLabel: 'Versión',
-    versionPrompt: 'Selecciona la versión de tu examen.',
+    versionLabel: 'Modelo',
+    versionPrompt: 'Selecciona el modelo de tu examen.',
     hQuestion: 'Pregunta',
     hResponses: 'Respuestas',
     hCorrect: 'Aciertos',
@@ -487,7 +487,7 @@ function saveConfigForAdmin(code, payload) {
       return Math.max(highest, Number.isInteger(version) ? version : 1);
     }, 1);
     if (valid.versionCount < highestUsedVersion) {
-      throw new Error('No puedes reducir las versiones por debajo de la versión usada en los envíos ya recibidos.');
+      throw new Error('No puedes reducir los modelos por debajo del modelo usado en los envíos ya recibidos.');
     }
   }
 
@@ -1013,7 +1013,7 @@ function getAnswerKey_(examId, config, version) {
   if (!rawKey) {
     const missing = selectedVersion === 1
       ? 'Encara no s\'ha definit la clau per a aquest examen.'
-      : 'Encara no s\'ha definit la clau per a la versió ' + selectedVersion + '.';
+      : 'Encara no s\'ha definit la clau per al model ' + selectedVersion + '.';
     throw new Error(missing);
   }
   return parseKey_(rawKey, config.nQuestions, config.options);
@@ -1042,7 +1042,7 @@ function normalizeExamVersion_(value, versionCount) {
   const version = value === '' || value === null || value === undefined ? 1 : Number(value);
   const maximum = Number.isInteger(versionCount) ? versionCount : 1;
   if (!Number.isInteger(version) || version < 1 || version > maximum || maximum > 10) {
-    throw new Error('La versión seleccionada no es válida.');
+    throw new Error('El modelo seleccionado no es válido.');
   }
   return version;
 }
@@ -1727,7 +1727,7 @@ function writeAnalysisTable_(sheet, summaryRows, config, lang) {
     statsRows = versions.map(version => {
       const rows = summaryRows.filter(row => Number(row.version) === version);
       const avg = rows.reduce((sum, row) => sum + (Number(row.percent) || 0), 0) / rows.length;
-      return [tx.hAvgCorrect + ' (V' + version + ')', avg];
+      return [tx.hAvgCorrect + ' (M' + version + ')', avg];
     });
     versions.forEach(version => {
       const versionRows = summaryRows.filter(row => Number(row.version) === version);
@@ -1747,7 +1747,7 @@ function writeAnalysisTable_(sheet, summaryRows, config, lang) {
     sheet.getRange(1, startCol2, 1, 2).setValues(hardHeader)
       .setFontWeight('bold')
       .setBackground('#fdecea');
-    const hardRows = hardest.map(r => ['V' + r.version + ' · #' + r.question, r.percent]);
+    const hardRows = hardest.map(r => ['M' + r.version + ' · #' + r.question, r.percent]);
     sheet.getRange(2, startCol2, hardRows.length, 2).setValues(hardRows);
     sheet.getRange(2, startCol2 + 1, hardRows.length, 1).setNumberFormat('0.##%');
     sheet.getRange(1, startCol2, hardRows.length + 1, 2).setBorder(true, true, true, true, true, true);
@@ -1756,7 +1756,7 @@ function writeAnalysisTable_(sheet, summaryRows, config, lang) {
   // Gràfic: columnes apilades (Correctes, Incorrectes, En blanc)
   if (countRows) {
     try {
-    const range = sheet.getRange(startRow, 1, countRows + 1, 4); // pregunta, encerts, errors i blancs per versió
+      const range = sheet.getRange(startRow, 1, countRows + 1, 4); // pregunta, encerts, errors i blancs per versió
       const chart = sheet.newChart()
         .setChartType(Charts.ChartType.COLUMN)
         .addRange(range)
@@ -2354,7 +2354,7 @@ function validateConfigPayload_(raw) {
   const enforceFullscreen = normalizeBooleanInput_(raw.enforceFullscreen);
   let versionCount = Number(raw.versionCount);
   if (!Number.isInteger(versionCount) || versionCount < 1 || versionCount > 10) {
-    throw new Error('El número de versiones debe ser un entero entre 1 y 10.');
+    throw new Error('El número de modelos debe ser un entero entre 1 y 10.');
   }
   let gradeMax = Number(raw.gradeMax);
   if (!Number.isFinite(gradeMax) || gradeMax <= 0) { gradeMax = 10; }
