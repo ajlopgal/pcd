@@ -466,6 +466,7 @@
           fullscreen_no_return: 'Sense retorn registrat',
           fullscreen_duration: 'Durada',
           fullscreen_none: 'Cap sortida registrada',
+          fullscreen_unavailable: 'Sense dades de registre',
           fullscreen_count: '%N% sortides',
           config_unsaved_hint: 'Hi ha canvis sense desar. Prem «Desa la configuració» per aplicar-los.',
           save_config_tooltip: 'Tens canvis sense desar',
@@ -595,6 +596,7 @@
           fullscreen_no_return: 'Sin regreso registrado',
           fullscreen_duration: 'Duración',
           fullscreen_none: 'Ninguna salida registrada',
+          fullscreen_unavailable: 'Sin datos de registro',
           fullscreen_count: '%N% salidas',
           config_unsaved_hint: 'Hay cambios sin guardar. Pulsa «Guardar configuración» para aplicarlos.',
           save_config_tooltip: 'Tienes cambios sin guardar',
@@ -1846,7 +1848,9 @@
             const td4 = document.createElement('td');
             td4.style.padding = '4px 6px';
             td4.style.whiteSpace = 'pre-line';
-            if (Array.isArray(it.fullscreenEvents) && it.fullscreenEvents.length) {
+            if (!it.fullscreenTrackingAvailable) {
+              td4.textContent = tAdmin('fullscreen_unavailable');
+            } else if (Array.isArray(it.fullscreenEvents) && it.fullscreenEvents.length) {
               const details = it.fullscreenEvents.map(event => {
                 const returnText = event.returnAt
                   ? tAdmin('fullscreen_return') + ': ' + event.returnAt

@@ -307,7 +307,9 @@ function submitResponse(payload) {
   const version = normalizeExamVersion_(payload.version, config.versionCount);
   getAnswerKey_(examId, config, version);
 
-  const fullscreenEvents = normalizeFullscreenEvents_(payload.fullscreenEvents, config.enforceFullscreen);
+  const fullscreenEvents = config.enforceFullscreen
+    ? normalizeFullscreenEvents_(payload.fullscreenEvents, true)
+    : null;
 
   const status = buildExamStatus_(config, new Date());
   if (!status.isOpen) {
@@ -447,7 +449,8 @@ function getSubmissionListForAdmin(code, examId) {
       timestampStr: (ts instanceof Date && !isNaN(ts.getTime())) ? Utilities.formatDate(ts, tz, 'yyyy-MM-dd HH:mm:ss') : '',
       studentCode: code,
       version: Number(row[5]) || 1,
-      fullscreenEvents: parseFullscreenEvents_(row[6], tz)
+      fullscreenEvents: parseFullscreenEvents_(row[6], tz),
+      fullscreenTrackingAvailable: String(row[6] || '').trim().charAt(0) === '['
     });
   });
   items.sort((a, b) => b.timestamp - a.timestamp);
