@@ -460,6 +460,13 @@
           sub_col_date: 'Data',
           sub_col_student: 'Codi alumne',
           sub_col_version: 'Model',
+          sub_col_fullscreen: 'Sortides de pantalla completa (orientatiu)',
+          fullscreen_exit: 'Sortida',
+          fullscreen_return: 'Retorn',
+          fullscreen_no_return: 'Sense retorn registrat',
+          fullscreen_duration: 'Durada',
+          fullscreen_none: 'Cap sortida registrada',
+          fullscreen_count: '%N% sortides',
           config_unsaved_hint: 'Hi ha canvis sense desar. Prem «Desa la configuració» per aplicar-los.',
           save_config_tooltip: 'Tens canvis sense desar',
           grading_unsaved_hint: 'Hi ha canvis de qualificació sense desar. Prem «Desa criteris de nota».',
@@ -582,6 +589,13 @@
           sub_col_date: 'Fecha',
           sub_col_student: 'Código alumno',
           sub_col_version: 'Modelo',
+          sub_col_fullscreen: 'Salidas de pantalla completa (orientativo)',
+          fullscreen_exit: 'Salida',
+          fullscreen_return: 'Regreso',
+          fullscreen_no_return: 'Sin regreso registrado',
+          fullscreen_duration: 'Duración',
+          fullscreen_none: 'Ninguna salida registrada',
+          fullscreen_count: '%N% salidas',
           config_unsaved_hint: 'Hay cambios sin guardar. Pulsa «Guardar configuración» para aplicarlos.',
           save_config_tooltip: 'Tienes cambios sin guardar',
           grading_unsaved_hint: 'Hay cambios de calificación sin guardar. Pulsa «Guardar criterios».',
@@ -1808,7 +1822,7 @@
           table.style.borderCollapse = 'collapse';
           const thead = document.createElement('thead');
           const thr = document.createElement('tr');
-          ;[tAdmin('sub_col_date'), tAdmin('sub_col_student'), tAdmin('sub_col_version')].forEach(h => {
+          ;[tAdmin('sub_col_date'), tAdmin('sub_col_student'), tAdmin('sub_col_version'), tAdmin('sub_col_fullscreen')].forEach(h => {
             const th = document.createElement('th');
             th.textContent = h;
             th.style.textAlign = 'left';
@@ -1829,9 +1843,25 @@
             const td3 = document.createElement('td');
             td3.textContent = 'M' + (Number(it.version) || 1);
             td3.style.padding = '4px 6px';
+            const td4 = document.createElement('td');
+            td4.style.padding = '4px 6px';
+            td4.style.whiteSpace = 'pre-line';
+            if (Array.isArray(it.fullscreenEvents) && it.fullscreenEvents.length) {
+              const details = it.fullscreenEvents.map(event => {
+                const returnText = event.returnAt
+                  ? tAdmin('fullscreen_return') + ': ' + event.returnAt
+                  : tAdmin('fullscreen_no_return');
+                return tAdmin('fullscreen_exit') + ': ' + event.exitAt + ' · ' + returnText + ' · ' +
+                  tAdmin('fullscreen_duration') + ': ' + event.durationText;
+              });
+              td4.textContent = tAdmin('fullscreen_count').replace('%N%', details.length) + '\n' + details.join('\n');
+            } else {
+              td4.textContent = tAdmin('fullscreen_none');
+            }
             tr.appendChild(td1);
             tr.appendChild(td2);
             tr.appendChild(td3);
+            tr.appendChild(td4);
             tbody.appendChild(tr);
           });
           table.appendChild(thead);

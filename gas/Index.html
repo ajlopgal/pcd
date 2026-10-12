@@ -141,6 +141,9 @@
       let preventLeaveBound = false;
       let fsHandlersBound = false;
       let fsRequested = false;
+      let fullscreenEvents = [];
+      let openFullscreenExit = null;
+      let lastFullscreenState = false;
 
       document.addEventListener('DOMContentLoaded', () => {
         // Instal·la proteccions de sortida com més aviat millor
@@ -336,6 +339,7 @@
           studentCode,
           version: Number(document.getElementById('exam-version').value),
           answers,
+          fullscreenEvents: getFullscreenEventsForSubmission(),
           userAgent: navigator.userAgent || 'unknown'
         };
 
@@ -435,6 +439,7 @@
             studentCode: (document.getElementById('student-code').value || '').trim(),
             version: Number(document.getElementById('exam-version').value) || 1,
             answers: collectAnswersArray(),
+            fullscreenEvents: fullscreenEvents,
             ts: Date.now()
           };
           storage.setItem(draftKey(), JSON.stringify(payload));
@@ -446,6 +451,9 @@
           if (!raw) return;
           const data = JSON.parse(raw);
           if (data && typeof data === 'object') {
+            if (Array.isArray(data.fullscreenEvents)) fullscreenEvents = data.fullscreenEvents.slice(-100);
+            const lastEvent = fullscreenEvents[fullscreenEvents.length - 1];
+            if (lastEvent && lastEvent.returnAt === null) openFullscreenExit = lastEvent;
             if (data.studentCode) {
               const studentField = document.getElementById('student-code');
               if (studentField) studentField.value = data.studentCode;
@@ -513,14 +521,36 @@
       }
       function installFullscreenHandlers() {
         if (fsHandlersBound) return;
+        lastFullscreenState = isFullscreen();
         const handler = () => {
-          // Sense avisos; si surt, reintentem al següent clic/tecla
+          const currentlyFullscreen = isFullscreen();
+          if (examActive && examConfig && examConfig.enforceFullscreen) {
+            if (lastFullscreenState && !currentlyFullscreen) {
+              openFullscreenExit = { exitAt: Date.now(), returnAt: null, durationMs: 0 };
+              fullscreenEvents.push(openFullscreenExit);
+              if (fullscreenEvents.length > 100) fullscreenEvents = fullscreenEvents.slice(-100);
+              saveDraft();
+            } else if (!lastFullscreenState && currentlyFullscreen && openFullscreenExit) {
+              openFullscreenExit.returnAt = Date.now();
+              openFullscreenExit.durationMs = Math.max(0, openFullscreenExit.returnAt - openFullscreenExit.exitAt);
+              openFullscreenExit = null;
+              saveDraft();
+            }
+          }
+          lastFullscreenState = currentlyFullscreen;
         };
         document.addEventListener('fullscreenchange', handler);
         document.addEventListener('webkitfullscreenchange', handler);
         document.addEventListener('msfullscreenchange', handler);
         document.addEventListener('fullscreenerror', handler);
         fsHandlersBound = true;
+      }
+      function getFullscreenEventsForSubmission() {
+        return fullscreenEvents.map(event => ({
+          exitAt: event.exitAt,
+          returnAt: event.returnAt === null ? null : event.returnAt,
+          durationMs: event.returnAt === null ? Math.max(0, Date.now() - event.exitAt) : event.durationMs
+        }));
       }
     </script>
   </body>

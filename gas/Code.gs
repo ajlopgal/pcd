@@ -16,7 +16,7 @@ const UI_MENU_ENABLED = false;
 const SHEET_HEADERS = {
   Config: ['exam_id', 'exam_name', 'n_questions', 'options', 'start_iso', 'end_iso', 'manual_state', 'shuffle_questions', 'shuffle_answers', 'enforce_fullscreen', 'grade_max', 'pass_threshold', 'penalize_wrong', 'penalty_value', 'version_count'],
   Keys: ['exam_id', 'key_json'],
-  Submissions: ['timestamp', 'exam_id', 'student_code', 'answers_json', 'user_agent', 'version'],
+  Submissions: ['timestamp', 'exam_id', 'student_code', 'answers_json', 'user_agent', 'version', 'fullscreen_events_json'],
   'Correcció': ['Data', 'Codi alumne', 'Encerts', 'Errors', 'En blanc', 'Nota (0-10)'],
   Settings: ['name', 'value']
 };
@@ -307,6 +307,8 @@ function submitResponse(payload) {
   const version = normalizeExamVersion_(payload.version, config.versionCount);
   getAnswerKey_(examId, config, version);
 
+  const fullscreenEvents = normalizeFullscreenEvents_(payload.fullscreenEvents, config.enforceFullscreen);
+
   const status = buildExamStatus_(config, new Date());
   if (!status.isOpen) {
     throw new Error(status.blockingMessage || "L'examen no està obert en aquest moment.");
@@ -319,7 +321,8 @@ function submitResponse(payload) {
     studentCode,
     JSON.stringify(normalizedAnswers),
     String(payload.userAgent || 'unknown'),
-    version
+    version,
+    JSON.stringify(fullscreenEvents)
   ]);
 
   return { saved: true };
@@ -443,7 +446,8 @@ function getSubmissionListForAdmin(code, examId) {
       timestamp: ts instanceof Date && !isNaN(ts.getTime()) ? ts.getTime() : 0,
       timestampStr: (ts instanceof Date && !isNaN(ts.getTime())) ? Utilities.formatDate(ts, tz, 'yyyy-MM-dd HH:mm:ss') : '',
       studentCode: code,
-      version: Number(row[5]) || 1
+      version: Number(row[5]) || 1,
+      fullscreenEvents: parseFullscreenEvents_(row[6], tz)
     });
   });
   items.sort((a, b) => b.timestamp - a.timestamp);
@@ -1045,6 +1049,54 @@ function normalizeExamVersion_(value, versionCount) {
     throw new Error('El modelo seleccionado no es válido.');
   }
   return version;
+}
+
+function normalizeFullscreenEvents_(value, fullscreenEnforced) {
+  if (!fullscreenEnforced || !Array.isArray(value)) return [];
+  return value.slice(0, 100).map(event => {
+    const exitAt = Number(event && event.exitAt);
+    if (!Number.isFinite(exitAt) || exitAt <= 0) return null;
+    const returnAtValue = event && event.returnAt;
+    const returnAt = returnAtValue === null || returnAtValue === '' || returnAtValue === undefined
+      ? null
+      : Number(returnAtValue);
+    if (returnAt !== null && (!Number.isFinite(returnAt) || returnAt < exitAt)) return null;
+    const duration = returnAt === null
+      ? Math.max(0, Math.min(86400000, Number(event.durationMs) || 0))
+      : Math.min(86400000, returnAt - exitAt);
+    return { exitAt: Math.round(exitAt), returnAt: returnAt === null ? null : Math.round(returnAt), durationMs: Math.round(duration) };
+  }).filter(Boolean);
+}
+
+function parseFullscreenEvents_(value, timezone) {
+  let events = [];
+  try {
+    events = JSON.parse(String(value || '[]'));
+  } catch (e) {
+    return [];
+  }
+  if (!Array.isArray(events)) return [];
+  return events.map(event => {
+    const exitAt = Number(event && event.exitAt);
+    const returnAt = event && event.returnAt !== null ? Number(event.returnAt) : null;
+    const durationMs = Math.max(0, Number(event && event.durationMs) || 0);
+    const exitDate = new Date(exitAt);
+    const returnDate = returnAt === null ? null : new Date(returnAt);
+    return {
+      exitAt: Number.isFinite(exitAt) ? Utilities.formatDate(exitDate, timezone, 'yyyy-MM-dd HH:mm:ss') : '',
+      returnAt: returnDate && !isNaN(returnDate.getTime()) ? Utilities.formatDate(returnDate, timezone, 'yyyy-MM-dd HH:mm:ss') : '',
+      durationMs: durationMs,
+      durationText: formatDuration_(durationMs)
+    };
+  });
+}
+
+function formatDuration_(durationMs) {
+  const totalSeconds = Math.floor(Math.max(0, durationMs) / 1000);
+  const hours = Math.floor(totalSeconds / 3600);
+  const minutes = Math.floor((totalSeconds % 3600) / 60);
+  const seconds = totalSeconds % 60;
+  return [hours, minutes, seconds].map(value => String(value).padStart(2, '0')).join(':');
 }
 
 function getStoredAnswerKeys_(examId) {
