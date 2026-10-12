@@ -283,8 +283,22 @@
           <div id="key-status" class="note warn hidden"></div>
           <div class="actions">
             <button id="save-key" type="submit" data-i18n="save_key">Guardar clave</button>
+            <button id="use-derived-key" type="button" class="secondary hidden" data-i18n="use_derived_key">Usar clave derivada del modelo base</button>
           </div>
         </form>
+
+        <div class="summary-card" id="question-map-card">
+          <h2 data-i18n="question_map_title">Equivalencia de preguntas</h2>
+          <p data-i18n="question_map_help">Cada fila corresponde a una pregunta base. Escribe su posición en cada modelo, en el mismo orden en que aparecen en el selector del alumnado. La columna del modelo base debe ser 1, 2, 3… Pega una fila por pregunta, sin encabezados, y separa las posiciones con tabuladores.</p>
+          <label for="base-model-selector" data-i18n="base_model">Modelo base</label>
+          <select id="base-model-selector"></select>
+          <label for="question-map-input" data-i18n="question_map_label">Posición de cada pregunta en cada modelo</label>
+          <textarea id="question-map-input" rows="8" placeholder="1&#9;13&#9;27&#9;3&#10;2&#9;5&#9;8&#9;14"></textarea>
+          <div id="question-map-status" class="note warn hidden"></div>
+          <div class="actions">
+            <button id="save-question-map" type="button" data-i18n="save_question_map">Guardar equivalencias</button>
+          </div>
+        </div>
 
         <div class="summary-card">
           <h2 data-i18n="grading_title">Criterios de calificación</h2>
@@ -430,6 +444,18 @@
           student_link_hint: "Comparteix l'enllaç quan la configuració estigui preparada i l'examen estigui obert.",
           answer_key: 'Clau de respostes',
           answer_key_help: 'Desa primer el nombre de models. Després enganxa la clau corresponent al model seleccionat.',
+          question_map_title: 'Equivalència de preguntes',
+          question_map_help: 'Cada fila correspon a una pregunta base. Escriu la seva posició en cada model, en el mateix ordre del selector de l’alumnat. La columna del model base ha de ser 1, 2, 3… Enganxa una fila per pregunta, sense capçalera, i separa les posicions amb tabuladors.',
+          base_model: 'Model base (referència)',
+          question_map_label: 'Posició de cada pregunta en cada model',
+          save_question_map: 'Desa les equivalències',
+          question_map_saved: 'Equivalències desades. L’anàlisi agruparà ara les preguntes de tots els models.',
+          question_map_rebase_error: 'No he pogut reordenar la taula automàticament. Revisa cada fila abans de desar-la.',
+          key_mode_manual: 'Clau pròpia desada per a aquest model.',
+          key_mode_derived: 'Clau generada a partir del model base. Se suposa que les opcions mantenen el mateix ordre.',
+          key_mode_missing: 'Falta la clau. Desa la clau base i les equivalències, o introdueix una clau pròpia.',
+          use_derived_key: 'Usa la clau derivada del model base',
+          key_derived_saved: 'Aquest model farà servir la clau derivada del model base.',
           key_version_option: 'Model %N%',
           key_label: 'Clau',
           save_key: 'Desa la clau',
@@ -560,6 +586,18 @@
           student_link_hint: 'Comparte el enlace cuando la configuración esté lista y el examen abierto.',
           answer_key: 'Clave de respuestas',
           answer_key_help: 'Guarda primero el número de modelos. Después pega la clave del modelo seleccionado.',
+          question_map_title: 'Equivalencia de preguntas',
+          question_map_help: 'Cada fila corresponde a una pregunta base. Escribe su posición en cada modelo, en el mismo orden del selector del alumnado. La columna del modelo base debe ser 1, 2, 3… Pega una fila por pregunta, sin encabezados, y separa las posiciones con tabuladores.',
+          base_model: 'Modelo base (referencia)',
+          question_map_label: 'Posición de cada pregunta en cada modelo',
+          save_question_map: 'Guardar equivalencias',
+          question_map_saved: 'Equivalencias guardadas. El análisis agrupará ahora las preguntas de todos los modelos.',
+          question_map_rebase_error: 'No he podido reordenar la tabla automáticamente. Revisa cada fila antes de guardarla.',
+          key_mode_manual: 'Clave propia guardada para este modelo.',
+          key_mode_derived: 'Clave generada a partir del modelo base. Se supone que las opciones conservan el mismo orden.',
+          key_mode_missing: 'Falta la clave. Guarda la clave base y las equivalencias, o introduce una clave propia.',
+          use_derived_key: 'Usar la clave derivada del modelo base',
+          key_derived_saved: 'Este modelo usará la clave derivada del modelo base.',
           key_version_option: 'Modelo %N%',
           key_label: 'Clave',
           save_key: 'Guardar clave',
@@ -691,6 +729,11 @@
       let selectedExamId = '';
       let selectedKeyVersion = 1;
       let currentKeysByVersion = {};
+      let currentManualKeysByVersion = {};
+      let currentQuestionMap = null;
+      let questionMapDirty = false;
+      let displayedBaseVersion = 1;
+      let currentExamConfig = null;
       let currentConfiguredVersionCount = 1;
       let baseUrl = '';
       let currentManualState = 'auto';
@@ -735,6 +778,13 @@
         document.getElementById('login-form').addEventListener('submit', handleLogin);
         document.getElementById('config-form').addEventListener('submit', handleConfigSave);
         document.getElementById('key-form').addEventListener('submit', handleKeySave);
+        document.getElementById('save-question-map').addEventListener('click', handleQuestionMapSave);
+        document.getElementById('question-map-input').addEventListener('input', () => {
+          questionMapDirty = true;
+          document.getElementById('question-map-status').classList.add('hidden');
+        });
+        document.getElementById('base-model-selector').addEventListener('change', handleBaseModelChange);
+        document.getElementById('use-derived-key').addEventListener('click', handleUseDerivedKey);
         document.getElementById('key-version-selector').addEventListener('change', event => {
           const keyInput = document.getElementById('key-input');
           if (keyInput) currentKeysByVersion[String(selectedKeyVersion)] = keyInput.value;
@@ -943,6 +993,82 @@
             setButtonBusy('save-key', false);
           })
           .saveAnswerKeyForAdmin(adminCode, selectedExamId, keyValue, selectedKeyVersion);
+      }
+
+      function handleQuestionMapSave() {
+        if (!adminCode || !selectedExamId) return;
+        const button = document.getElementById('save-question-map');
+        const status = document.getElementById('question-map-status');
+        button.disabled = true;
+        status.classList.add('hidden');
+        google.script.run
+          .withSuccessHandler(() => {
+            questionMapDirty = false;
+            showFlash(tAdmin('question_map_saved'), false);
+            loadAdminState(selectedExamId);
+            button.disabled = false;
+          })
+          .withFailureHandler(err => {
+            status.textContent = extractMessage(err);
+            status.className = 'note error';
+            button.disabled = false;
+          })
+          .saveQuestionMappingForAdmin(
+            adminCode,
+            selectedExamId,
+            Number(document.getElementById('base-model-selector').value),
+            document.getElementById('question-map-input').value
+          );
+      }
+
+      function handleBaseModelChange() {
+        const input = document.getElementById('question-map-input');
+        const nextBase = Number(document.getElementById('base-model-selector').value) || 1;
+        const previousBase = displayedBaseVersion || nextBase;
+        const status = document.getElementById('question-map-status');
+        status.classList.add('hidden');
+        if (nextBase !== previousBase && input.value.trim()) {
+          const matrix = parseQuestionMapTextClient(input.value);
+          if (matrix && matrix.length === Number(currentExamConfig && currentExamConfig.nQuestions)) {
+            const n = matrix.length;
+            const reordered = Array(n);
+            matrix.forEach(row => { reordered[Number(row[nextBase - 1]) - 1] = row; });
+            if (reordered.every(Boolean)) {
+              input.value = reordered.map(row => row.join('\t')).join('\n');
+            } else {
+              status.textContent = tAdmin('question_map_rebase_error');
+              status.className = 'note error';
+            }
+          } else {
+            status.textContent = tAdmin('question_map_rebase_error');
+            status.className = 'note error';
+          }
+        }
+        displayedBaseVersion = nextBase;
+        questionMapDirty = true;
+      }
+
+      function parseQuestionMapTextClient(text) {
+        const lines = String(text || '').trim().split(/\r?\n/).filter(line => line.trim());
+        if (!lines.length) return null;
+        return lines.map(line => line.trim().split(/[\t;, ]+/).filter(Boolean).map(Number));
+      }
+
+      function handleUseDerivedKey() {
+        if (!adminCode || !selectedExamId) return;
+        const button = document.getElementById('use-derived-key');
+        button.disabled = true;
+        google.script.run
+          .withSuccessHandler(() => {
+            showFlash(tAdmin('key_derived_saved'), false);
+            loadAdminState(selectedExamId);
+            button.disabled = false;
+          })
+          .withFailureHandler(err => {
+            showFlash(extractMessage(err), true);
+            button.disabled = false;
+          })
+          .useDerivedAnswerKeyForAdmin(adminCode, selectedExamId, selectedKeyVersion);
       }
 
       function handleCorrection() {
@@ -1300,6 +1426,9 @@
           keyInput.value = '';
         }
         currentKeysByVersion = {};
+        currentManualKeysByVersion = {};
+        currentQuestionMap = null;
+        currentExamConfig = null;
         selectedKeyVersion = 1;
         currentConfiguredVersionCount = 1;
         if (versionsCountInput) versionsCountInput.value = '1';
@@ -1359,6 +1488,8 @@
             keyInput.value = '';
           }
           if (keyVersionSelector) keyVersionSelector.innerHTML = '<option value="1">' + tAdmin('key_version_option').replace('%N%', '1') + '</option>';
+          questionMapDirty = false;
+          renderQuestionMapEditor(null, null);
           return;
         }
 
@@ -1366,6 +1497,8 @@
         resetStatusBadge();
 
         if (state.config) {
+          currentExamConfig = state.config;
+          currentQuestionMap = state.questionMap || null;
           currentConfiguredVersionCount = Number(state.config.versionCount) || 1;
           document.getElementById('questions-count').value = state.config.nQuestions;
           if (versionsCountInput) versionsCountInput.value = state.config.versionCount || 1;
@@ -1463,6 +1596,7 @@
 
         // Si ha canviat d'examen, tanquem el panell de lliuraments i netegem
         if (lastExamId !== selectedExamId) {
+          questionMapDirty = false;
           toggleSubmissionsPanel(false);
           const info = document.getElementById('submissions-info');
           const list = document.getElementById('submissions-list');
@@ -1472,12 +1606,50 @@
         lastExamId = selectedExamId;
 
         currentKeysByVersion = state.keysByVersion || (state.keyPresent ? { '1': state.keyValue || '' } : {});
+        currentManualKeysByVersion = state.manualKeysByVersion || {};
+        renderQuestionMapEditor(state.config, state.questionMap);
         renderKeyEditor(currentConfiguredVersionCount);
 
         const selector = document.getElementById('exam-selector');
         selector.value = selectedExamId;
         showConfigLoading(false);
         showOverviewLoading(false);
+      }
+
+      function renderQuestionMapEditor(config, questionMap) {
+        const selector = document.getElementById('base-model-selector');
+        const input = document.getElementById('question-map-input');
+        const status = document.getElementById('question-map-status');
+        const saveButton = document.getElementById('save-question-map');
+        if (!selector || !input || !status || !saveButton) return;
+        selector.innerHTML = '';
+        const count = config ? Number(config.versionCount) || 1 : 1;
+        for (let version = 1; version <= count; version++) {
+          const option = document.createElement('option');
+          option.value = String(version);
+          option.textContent = tAdmin('key_version_option').replace('%N%', String(version));
+          selector.appendChild(option);
+        }
+        if (!questionMapDirty || !config) {
+          input.value = questionMap && Array.isArray(questionMap.positions)
+            ? questionMap.positions.map(row => row.join('\t')).join('\n')
+            : '';
+          displayedBaseVersion = questionMap ? Number(questionMap.baseVersion) || 1 : 1;
+        }
+        selector.value = String(questionMapDirty ? displayedBaseVersion : (questionMap ? questionMap.baseVersion : displayedBaseVersion));
+        selector.disabled = !config;
+        input.disabled = !config;
+        saveButton.disabled = !config;
+        if (questionMapDirty) {
+          status.className = 'note warn hidden';
+        } else if (questionMap) {
+          status.textContent = tAdmin('question_map_saved');
+          status.className = 'note ok';
+          status.classList.remove('hidden');
+        } else {
+          status.textContent = '';
+          status.className = 'note warn hidden';
+        }
       }
 
       function renderKeyEditor(versionCount) {
@@ -1498,8 +1670,15 @@
         selector.value = String(selectedKeyVersion);
         const keyValue = currentKeysByVersion[String(selectedKeyVersion)] || '';
         input.value = keyValue;
-        status.textContent = keyValue ? tAdmin('key_saved') : tAdmin('key_not_set');
-        status.className = keyValue ? 'note ok' : 'note warn';
+        const isManual = !!currentManualKeysByVersion[String(selectedKeyVersion)];
+        const hasDerivedKey = !!(keyValue && currentQuestionMap && selectedKeyVersion !== Number(currentQuestionMap.baseVersion));
+        const useDerivedButton = document.getElementById('use-derived-key');
+        if (useDerivedButton) {
+          useDerivedButton.classList.toggle('hidden', !(isManual && currentQuestionMap && selectedKeyVersion !== Number(currentQuestionMap.baseVersion)));
+        }
+        status.textContent = isManual ? tAdmin('key_mode_manual') :
+          (hasDerivedKey ? tAdmin('key_mode_derived') : tAdmin('key_mode_missing'));
+        status.className = (isManual || hasDerivedKey) ? 'note ok' : 'note warn';
         status.classList.remove('hidden');
       }
 
